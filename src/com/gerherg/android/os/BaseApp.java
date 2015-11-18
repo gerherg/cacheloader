@@ -5,8 +5,9 @@
 
 package com.gerherg.android.os;
 
+import com.gerherg.android.plugin.cacherloader.Cache;
+
 import android.app.Application;
-import android.database.sqlite.SQLiteDatabase;
 
 public abstract class BaseApp extends Application {
 
@@ -20,5 +21,10 @@ public abstract class BaseApp extends Application {
         return mMe;
     }
 
-    public abstract SQLiteDatabase getCacheDatabase();
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        Cache.init(this);
+    }
+
 }

@@ -9,25 +9,68 @@ import com.gerherg.android.util.Log;
 import com.gerherg.android.util.Utils;
 
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
+import android.provider.BaseColumns;
 import android.text.TextUtils;
 
 public class Cache {
 
     private static final String TAG = "CACHE";
 
-    public static final String TABLE_CACHE = "cache";
+    private static final String TABLE_CACHE = "cache";
 
-    public static final String TABLE_ICON = "icon";
+    private static final String TABLE_ICON = "icon";
 
-    public static final String COLUMN_CACHE_URL = "url";
-    public static final String COLUMN_CACHE_FILE = "file";
-    public static final String COLUMN_CACHE_FILE_CRC = "crc";
+    private static final String COLUMN_CACHE_URL = "url";
+    private static final String COLUMN_CACHE_FILE = "file";
+    private static final String COLUMN_CACHE_FILE_CRC = "crc";
 
-    public static final String COLUMN_ICON_URL = "url";
-    public static final String COLUMN_ICON_DATA = "data";
-    public static final String COLUMN_ICON_WIDTH = "width";
-    public static final String COLUMN_ICON_HEIGHT = "height";
+    private static final String COLUMN_ICON_URL = "url";
+    private static final String COLUMN_ICON_DATA = "data";
+    private static final String COLUMN_ICON_WIDTH = "width";
+    private static final String COLUMN_ICON_HEIGHT = "height";
+
+    private static final String DATABASE_NAME = "cache.db";
+    private static final int DATABASE_VERSION = 1;
+
+    private SQLiteOpenHelper mSQLiteOpenHelper;
+
+    private void initDatabase(Context context) {
+        mSQLiteOpenHelper = new SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
+
+            @Override
+            public void onCreate(SQLiteDatabase db) {
+                db.execSQL("CREATE TABLE " + Cache.TABLE_CACHE + "(" + BaseColumns._ID
+                        + " INTEGER PRIMARY KEY," + Cache.COLUMN_CACHE_URL + " text,"
+                        + Cache.COLUMN_CACHE_FILE + " text," + Cache.COLUMN_CACHE_FILE_CRC
+                        + " long);");
+                db.execSQL("CREATE TABLE " + Cache.TABLE_ICON + "(" + BaseColumns._ID
+                        + " INTEGER PRIMARY KEY," + Cache.COLUMN_ICON_URL + " text,"
+                        + Cache.COLUMN_ICON_DATA + " BLOB," + Cache.COLUMN_ICON_WIDTH + " float,"
+                        + Cache.COLUMN_ICON_HEIGHT + " float);");
+            }
+
+            @Override
+            public void onUpgrade(SQLiteDatabase arg0, int arg1, int arg2) {
+
+            }
+
+        };
+    }
+
+    private static Cache sInstance;
+
+    public static void init(Context context) {
+        synchronized (Cache.class) {
+            if (sInstance == null) {
+                sInstance = new Cache();
+                sInstance.initDatabase(context);
+            }
+        }
+    }
 
     static boolean cache(String url, byte[] data) {
         Utils.enforceNonUIThread();
@@ -59,9 +102,9 @@ public class Cache {
         };
 
         boolean result = true;
-        if (BaseApp.getInstance().getCacheDatabase().update(TABLE_CACHE, values, selection,
+        if (sInstance.mSQLiteOpenHelper.getWritableDatabase().update(TABLE_CACHE, values, selection,
                 selectionArgs) == 0) {
-            result = BaseApp.getInstance().getCacheDatabase().insert(TABLE_CACHE, null,
+            result = sInstance.mSQLiteOpenHelper.getWritableDatabase().insert(TABLE_CACHE, null,
                     values) != -1;
         }
 
@@ -83,8 +126,8 @@ public class Cache {
         long crc = 0;
         Cursor c = null;
         try {
-            c = BaseApp.getInstance().getCacheDatabase().query(TABLE_CACHE, null, selection,
-                    selectionArgs, null, null, null);
+            c = sInstance.mSQLiteOpenHelper.getWritableDatabase().query(TABLE_CACHE, null,
+                    selection, selectionArgs, null, null, null);
             if (c != null && c.moveToNext()) {
                 filePath = c.getString(c.getColumnIndex(COLUMN_CACHE_FILE));
                 crc = c.getLong(c.getColumnIndex(COLUMN_CACHE_FILE_CRC));
@@ -124,8 +167,8 @@ public class Cache {
 
         Cursor c = null;
         try {
-            c = BaseApp.getInstance().getCacheDatabase().query(TABLE_CACHE, null, selection,
-                    selectionArgs, null, null, null);
+            c = sInstance.mSQLiteOpenHelper.getWritableDatabase().query(TABLE_CACHE, null,
+                    selection, selectionArgs, null, null, null);
             if (c != null && c.moveToNext()) {
                 String filePath = c.getString(c.getColumnIndex(COLUMN_CACHE_FILE));
                 IOUtils.delete(filePath);
@@ -136,7 +179,8 @@ public class Cache {
                 c.close();
             }
         }
-        BaseApp.getInstance().getCacheDatabase().delete(TABLE_CACHE, selection, selectionArgs);
+        sInstance.mSQLiteOpenHelper.getWritableDatabase().delete(TABLE_CACHE, selection,
+                selectionArgs);
     }
 
     static boolean cacheIcon(String url, byte[] data, float width, float height) {
@@ -153,9 +197,10 @@ public class Cache {
         String[] selectionArgs = new String[] {
                 url, String.valueOf(width), String.valueOf(height)
         };
-        if (BaseApp.getInstance().getCacheDatabase().update(TABLE_ICON, values, selection,
+        if (sInstance.mSQLiteOpenHelper.getWritableDatabase().update(TABLE_ICON, values, selection,
                 selectionArgs) == 0) {
-            return BaseApp.getInstance().getCacheDatabase().insert(TABLE_ICON, null, values) != -1;
+            return sInstance.mSQLiteOpenHelper.getWritableDatabase().insert(TABLE_ICON, null,
+                    values) != -1;
         } else {
             return true;
         }
@@ -167,13 +212,14 @@ public class Cache {
         String[] selectionArgs = new String[] {
                 url
         };
-        BaseApp.getInstance().getCacheDatabase().delete(TABLE_ICON, selection, selectionArgs);
+        sInstance.mSQLiteOpenHelper.getWritableDatabase().delete(TABLE_ICON, selection,
+                selectionArgs);
     }
 
     public static void clear() {
         Utils.enforceNonUIThread();
-        BaseApp.getInstance().getCacheDatabase().delete(TABLE_CACHE, null, null);
-        BaseApp.getInstance().getCacheDatabase().delete(TABLE_ICON, null, null);
+        sInstance.mSQLiteOpenHelper.getWritableDatabase().delete(TABLE_CACHE, null, null);
+        sInstance.mSQLiteOpenHelper.getWritableDatabase().delete(TABLE_ICON, null, null);
         IOUtils.delete(Utils.getHttpCacheDir(BaseApp.getInstance()));
     }
 
@@ -191,7 +237,7 @@ public class Cache {
                 url, String.valueOf(width), String.valueOf(height)
         };
         try {
-            c = BaseApp.getInstance().getCacheDatabase().query(TABLE_ICON, null, selection,
+            c = sInstance.mSQLiteOpenHelper.getWritableDatabase().query(TABLE_ICON, null, selection,
                     selectionArgs, null, null, null);
             if (c != null && c.moveToNext()) {
                 return c.getBlob(c.getColumnIndex(COLUMN_ICON_DATA));
